@@ -195,3 +195,16 @@ dialog.sheet:not([open]) { display: none; }
   background: var(--panel-2); color: var(--text); padding: 10px 16px; border-radius: 10px; z-index: 50;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); max-width: calc(100% - 32px); text-align: center;
 }
+
+/* Belegerkennung */
+.sub.first { margin-top: 0; }
+.ocr-status { font-size: 14px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.ocr-status.ok { color: var(--green); border-color: rgba(48, 209, 88, 0.35); }
+.ocr-status .bar { height: 4px; background: var(--panel-2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.ocr-status .bar i { display: block; height: 100%; background: var(--accent); width: 0; transition: width 0.3s; }
+.field.auto { background: rgba(10, 132, 255, 0.12); }
+.field > span.grow { flex: 1; width: auto; color: var(--text); }
+.switch { flex: none !important; appearance: none; -webkit-appearance: none; width: 51px; height: 31px; border-radius: 16px; background: var(--panel-2); position: relative; cursor: pointer; transition: background 0.2s; padding: 0 !important; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; transition: transform 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,.3); }
+.switch:checked { background: var(--green); }
+.switch:checked::after { transform: translateX(20px); }

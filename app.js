@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from './vendor/pdf-lib.esm.min.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 
 /* ---------- Konstanten ---------- */
 
@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS = {
   iban: '',
   recipients: 'celik@schroederimmobilien.de, buchhaltung@schroederimmobilien.de',
   company: 'Schröder Immobilien',
+  ocr: true,
 };
 
 /* ---------- Hilfsfunktionen ---------- */
@@ -223,6 +224,9 @@ const form = {
   newFiles: [], // {id, type, name, blob}
   removed: [], // ids
   urls: [],
+  isNew: false,
+  touched: new Set(), // vom Nutzer geänderte Felder – werden nie automatisch überschrieben
+  ocrToken: 0,
 };
 
 function buildCatSeg() {
@@ -248,6 +252,10 @@ function openEntry(entry) {
     : { id: uid(), created: Date.now(), cat: 'bewirtung', date: defaultDate(), amount: 0, title: '', fuel: 'Strom', detail: '', occasion: '', persons: '', place: '', note: '', receipts: [] };
   form.newFiles = [];
   form.removed = [];
+  form.isNew = isNew;
+  form.touched = new Set();
+  form.ocrToken++;
+  setOcrStatus(null);
   const f = $('#entryForm');
   f.reset();
   f.cat.value = form.entry.cat;
@@ -260,7 +268,7 @@ function openEntry(entry) {
   f.persons.value = form.entry.persons || '';
   f.place.value = form.entry.place || '';
   f.note.value = form.entry.note || '';
-  f.querySelectorAll('.invalid').forEach((el) => el.classList.remove('invalid'));
+  f.querySelectorAll('.invalid, .auto').forEach((el) => el.classList.remove('invalid', 'auto'));
   $('#entryTitle').textContent = isNew ? 'Neue Ausgabe' : 'Ausgabe bearbeiten';
   $('#btnDelete').hidden = isNew;
   applyCatVisibility();
@@ -310,6 +318,7 @@ async function renderReceipts() {
 async function addFiles(fileList) {
   const files = [...fileList];
   if (!files.length) return;
+  const before = form.newFiles.length;
   for (const file of files) {
     try {
       if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
@@ -324,6 +333,70 @@ async function addFiles(fileList) {
     }
   }
   renderReceipts();
+  const firstImage = form.newFiles.slice(before).find((f) => f.type.startsWith('image/'));
+  const amountEmpty = !$('#entryForm').amount.value.trim();
+  if (firstImage && state.settings.ocr !== false && (form.isNew || amountEmpty)) autoFill(firstImage.blob);
+}
+
+/* ---------- Belegerkennung ---------- */
+
+let ocrModule;
+function setOcrStatus(html, cls = '') {
+  const el = $('#ocrStatus');
+  el.hidden = !html;
+  el.className = 'ocr-status ' + cls;
+  if (html) el.innerHTML = html;
+}
+
+async function autoFill(blob) {
+  const token = ++form.ocrToken;
+  const progress = (p) => {
+    if (token !== form.ocrToken) return;
+    const pct = Math.round(p * 100);
+    setOcrStatus(`🔍 Beleg wird gelesen … ${pct} %<div class="bar"><i style="width:${pct}%"></i></div>`);
+  };
+  progress(0);
+  let r;
+  try {
+    ocrModule ||= await import('./ocr.js');
+    r = await ocrModule.readReceipt(blob, progress);
+  } catch (err) {
+    console.error(err);
+    if (token === form.ocrToken) setOcrStatus('Automatisches Auslesen hat nicht geklappt – bitte von Hand ausfüllen.');
+    return;
+  }
+  if (token !== form.ocrToken || !$('#entryDlg').open) return;
+  console.debug('OCR', r);
+
+  const f = $('#entryForm');
+  const found = [];
+  const mark = (input) => input.closest('.field')?.classList.add('auto');
+  if (r.cat && form.isNew && !form.touched.has('cat')) {
+    f.cat.value = r.cat;
+    applyCatVisibility();
+    if (r.cat !== 'sonstiges') found.push(CAT[r.cat].label);
+  }
+  if (r.fuel && f.cat.value === 'kfz' && !form.touched.has('fuel')) {
+    f.fuel.value = r.fuel;
+    mark(f.fuel);
+  }
+  if (r.date && !form.touched.has('date')) {
+    f.date.value = r.date;
+    mark(f.date);
+    found.push('Datum');
+  }
+  if (r.amount && !f.amount.value.trim()) {
+    f.amount.value = moneyInput(r.amount);
+    mark(f.amount);
+    found.push('Betrag');
+  }
+  if (r.title && !f.title.value.trim()) {
+    f.title.value = r.title;
+    mark(f.title);
+    found.push('Name');
+  }
+  if (found.length) setOcrStatus(`✓ Erkannt: ${found.join(', ')} – bitte kurz prüfen.`, 'ok');
+  else setOcrStatus('Auf dem Foto wurde nichts Eindeutiges erkannt – bitte von Hand ausfüllen.');
 }
 
 async function saveEntry(ev) {
@@ -375,6 +448,7 @@ async function saveEntry(ev) {
 }
 
 function closeEntry() {
+  form.ocrToken++;
   revokeFormUrls();
   $('#entryDlg').close();
 }
@@ -395,6 +469,7 @@ let pendingLogo; // undefined = unverändert, null = entfernen, Blob = neu
 function openSettings(firstRun = false) {
   const f = $('#settingsForm');
   for (const k of ['name', 'bank', 'iban', 'recipients']) f[k].value = state.settings[k] || '';
+  f.ocr.checked = state.settings.ocr !== false;
   pendingLogo = undefined;
   renderLogoPreview(state.logo);
   $('#firstRunNote').hidden = !firstRun;
@@ -422,6 +497,7 @@ async function saveSettings(ev) {
     bank: f.bank.value.trim(),
     iban: fmtIban(f.iban.value),
     recipients: f.recipients.value.trim(),
+    ocr: f.ocr.checked,
   };
   await db.set('settings', state.settings);
   if (pendingLogo !== undefined) {
@@ -886,7 +962,15 @@ async function init() {
 
   // Erfassen-Dialog
   $('#entryForm').addEventListener('submit', saveEntry);
-  $('#entryForm').addEventListener('change', (ev) => ev.target.name === 'cat' && applyCatVisibility());
+  $('#entryForm').addEventListener('change', (ev) => {
+    if (ev.target.name) form.touched.add(ev.target.name);
+    if (ev.target.name === 'cat') applyCatVisibility();
+  });
+  $('#entryForm').addEventListener('input', (ev) => {
+    if (!ev.target.name) return;
+    form.touched.add(ev.target.name);
+    ev.target.closest('.field')?.classList.remove('auto');
+  });
   $('#entryForm').amount.addEventListener('blur', (ev) => {
     const c = parseMoney(ev.target.value);
     if (c > 0) ev.target.value = moneyInput(c);
@@ -928,7 +1012,7 @@ async function init() {
   document.querySelectorAll('[data-close]').forEach((b) =>
     b.addEventListener('click', () => {
       const dlg = b.closest('dialog');
-      if (dlg.id === 'entryDlg') revokeFormUrls();
+      if (dlg.id === 'entryDlg') (form.ocrToken++, revokeFormUrls());
       dlg.close();
     }),
   );

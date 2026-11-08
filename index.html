@@ -62,6 +62,14 @@
       <div class="sheet-body">
         <div class="seg" id="catSeg"></div>
 
+        <h3 class="sub first">Beleg</h3>
+        <div class="ocr-status" id="ocrStatus" hidden></div>
+        <div class="receipts" id="receipts"></div>
+        <div class="row-btns">
+          <label class="btn">📷 Foto aufnehmen<input type="file" accept="image/*" capture="environment" id="fileCam" hidden></label>
+          <label class="btn">📎 Datei / Foto wählen<input type="file" accept="image/*,application/pdf" multiple id="fileAny" hidden></label>
+        </div>
+
         <div class="group">
           <label class="field"><span>Datum</span><input type="date" name="date" required></label>
           <label class="field"><span>Betrag (€)</span><input type="text" name="amount" inputmode="decimal" placeholder="0,00" autocomplete="off" required></label>
@@ -83,13 +91,6 @@
 
         <div class="group">
           <label class="field col"><span>Notiz</span><textarea name="note" rows="2"></textarea></label>
-        </div>
-
-        <h3 class="sub">Belege</h3>
-        <div class="receipts" id="receipts"></div>
-        <div class="row-btns">
-          <label class="btn">📷 Foto aufnehmen<input type="file" accept="image/*" capture="environment" id="fileCam" hidden></label>
-          <label class="btn">📎 Datei / Foto wählen<input type="file" accept="image/*,application/pdf" multiple id="fileAny" hidden></label>
         </div>
 
         <button type="button" class="btn danger wide" id="btnDelete" hidden>Ausgabe löschen</button>
@@ -117,6 +118,12 @@
         <div class="group">
           <label class="field col"><span>Empfänger (mit Komma getrennt)</span><textarea name="recipients" rows="2" autocapitalize="off"></textarea></label>
         </div>
+        <h3 class="sub">Belegerkennung</h3>
+        <div class="group">
+          <label class="field"><span class="grow">Belegfotos automatisch auslesen</span><input type="checkbox" name="ocr" class="switch"></label>
+        </div>
+        <p class="muted small">Datum, Betrag, Name und Kategorie werden direkt auf dem Handy aus dem Foto gelesen – kostenlos, nichts verlässt das Gerät. Bitte immer kurz prüfen.</p>
+
         <h3 class="sub">Firmenlogo</h3>
         <div class="logo-box">
           <img id="logoPreview" alt="" hidden>

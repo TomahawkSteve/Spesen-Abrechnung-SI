@@ -1,11 +1,12 @@
 // Offline-Unterstützung: App-Dateien werden zwischengespeichert.
 // Bei jeder Änderung an der App CACHE hochzählen.
-const CACHE = 'spesen-si-v1';
+const CACHE = 'spesen-si-v2';
 const ASSETS = [
   './',
   './index.html',
   './app.css',
   './app.js',
+  './ocr.js',
   './manifest.webmanifest',
   './vendor/pdf-lib.esm.min.js',
   './icons/icon-192.png',
@@ -32,6 +33,8 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const cached = await cache.match(req, { ignoreSearch: true });
+      // Große Bibliotheken ändern sich nie – nicht jedes Mal neu laden.
+      if (cached && req.url.includes('/vendor/')) return cached;
       const network = fetch(req)
         .then((res) => {
           if (res.ok) cache.put(req, res.clone());

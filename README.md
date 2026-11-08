@@ -4,6 +4,7 @@ Web-App (PWA) für Spesenabrechnungen bei Schröder Immobilien.
 
 - Ausgaben erfassen: Datum, Betrag, Kategorie, Bezeichnung, Notiz
 - Belege fotografieren oder als Datei/PDF anhängen
+- **Belegerkennung:** Datum, Betrag, Name und Kategorie werden automatisch aus dem Foto gelesen. Das passiert kostenlos und direkt auf dem Gerät mit [Tesseract.js](https://tesseract.projectnaptha.com), Apache-2.0-Lizenz, Dateien in `vendor/tesseract/`.
 - Kategorien wie in der bisherigen Excel-Vorlage:
   - **Position I:** Kraftfahrzeugkosten
   - **Position II:** Präsente, Sonstiges, Bewirtung (mit Anlass, Personen und Ort)
