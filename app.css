@@ -39,7 +39,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; min-height: 32px; }
-.brand img { max-height: 32px; max-width: 200px; }
+.brand img.logo { height: 38px; width: auto; display: block; }
 .wordmark { font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 13px; color: var(--muted); }
 
 .icon-btn {

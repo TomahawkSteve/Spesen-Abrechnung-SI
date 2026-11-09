@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from './vendor/pdf-lib.esm.min.js';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 /* ---------- Konstanten ---------- */
 
@@ -118,7 +118,6 @@ const state = {
   month: monthKey(new Date()),
   entries: [],
   settings: { ...DEFAULT_SETTINGS },
-  logo: null, // Blob (PNG)
 };
 
 const entriesOfMonth = (key) =>
@@ -168,20 +167,6 @@ function render() {
   }).join('');
   $('#list').innerHTML = html;
   $('#emptyHint').hidden = list.length > 0;
-}
-
-function renderBrand() {
-  const img = $('#brandLogo');
-  if (state.logo) {
-    if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
-    img.dataset.url = URL.createObjectURL(state.logo);
-    img.src = img.dataset.url;
-    img.hidden = false;
-    $('#brandText').hidden = true;
-  } else {
-    img.hidden = true;
-    $('#brandText').hidden = false;
-  }
 }
 
 /* ---------- Bilder verkleinern ---------- */
@@ -465,27 +450,13 @@ async function deleteCurrent() {
 
 /* ---------- Einstellungen ---------- */
 
-let pendingLogo; // undefined = unverändert, null = entfernen, Blob = neu
 function openSettings(firstRun = false) {
   const f = $('#settingsForm');
   for (const k of ['name', 'bank', 'iban', 'recipients']) f[k].value = state.settings[k] || '';
   f.ocr.checked = state.settings.ocr !== false;
-  pendingLogo = undefined;
-  renderLogoPreview(state.logo);
   $('#firstRunNote').hidden = !firstRun;
   $('#versionInfo').textContent = `Spesen SI · Version ${APP_VERSION}`;
   $('#settingsDlg').showModal();
-}
-
-function renderLogoPreview(blob) {
-  const img = $('#logoPreview');
-  if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
-  if (blob) {
-    img.dataset.url = URL.createObjectURL(blob);
-    img.src = img.dataset.url;
-  }
-  img.hidden = !blob;
-  $('#logoNone').hidden = !!blob;
 }
 
 async function saveSettings(ev) {
@@ -500,12 +471,6 @@ async function saveSettings(ev) {
     ocr: f.ocr.checked,
   };
   await db.set('settings', state.settings);
-  if (pendingLogo !== undefined) {
-    state.logo = pendingLogo;
-    if (pendingLogo) await db.set('logo', pendingLogo);
-    else await db.del('logo');
-    renderBrand();
-  }
   $('#settingsDlg').close();
   toast('Einstellungen gesichert');
 }
@@ -527,7 +492,6 @@ async function exportBackup() {
     version: 1,
     exported: new Date().toISOString(),
     settings: state.settings,
-    logo: state.logo ? await blobToDataUrl(state.logo) : null,
     entries: state.entries,
     files: await Promise.all(files.map(async (f) => ({ id: f.id, type: f.type, name: f.name, data: await blobToDataUrl(f.blob) }))),
   };
@@ -549,13 +513,8 @@ async function importBackup(file) {
     });
     state.settings = { ...DEFAULT_SETTINGS, ...data.settings };
     await db.set('settings', state.settings);
-    if (data.logo) {
-      state.logo = await (await fetch(data.logo)).blob();
-      await db.set('logo', state.logo);
-    }
     state.entries = await db.allEntries();
     $('#settingsDlg').close();
-    renderBrand();
     render();
     toast('Sicherung geladen');
   } catch (err) {
@@ -685,16 +644,14 @@ async function buildReport(month) {
   /* --- Seite 1: Kopf --- */
   newPage();
   const topY = H - M;
-  if (state.logo) {
-    try {
-      const logo = await pdf.embedPng(await state.logo.arrayBuffer());
-      const sc = Math.min(190 / logo.width, 46 / logo.height);
-      page.drawImage(logo, { x: M, y: topY - logo.height * sc, width: logo.width * sc, height: logo.height * sc });
-    } catch (err) {
-      console.warn('Logo', err);
-      T(s.company.toUpperCase(), M, topY - 16, { size: 14, font: B });
-    }
-  } else {
+  try {
+    const res = await fetch('img/logo.png');
+    if (!res.ok) throw new Error(res.status);
+    const logo = await pdf.embedPng(await res.arrayBuffer());
+    const sc = Math.min(170 / logo.width, 56 / logo.height);
+    page.drawImage(logo, { x: M, y: topY - logo.height * sc, width: logo.width * sc, height: logo.height * sc });
+  } catch (err) {
+    console.warn('Logo', err);
     T(s.company.toUpperCase(), M, topY - 16, { size: 14, font: B });
   }
   // Kasten rechts: Name / Bank / IBAN
@@ -747,13 +704,16 @@ async function buildReport(month) {
   y -= 8;
   band('Gesamt Position I + II', fmtMoney(t.total), { fill: ACC, size: 12.5, h: 26 });
 
-  /* --- Unterschrift --- */
-  need(80);
-  y -= 60;
-  page.drawLine({ start: { x: M, y }, end: { x: M + 200, y }, thickness: 0.6, color: INK });
-  page.drawLine({ start: { x: W - M - 200, y }, end: { x: W - M, y }, thickness: 0.6, color: INK });
-  T('Ort, Datum', M, y - 11, { size: 8, color: MUTED });
-  T('Unterschrift', W - M - 200, y - 11, { size: 8, color: MUTED });
+  /* --- Felder für die Stempel der Buchhaltung --- */
+  const stampH = 95, gap = 20, stampW = (W - 2 * M - gap) / 2;
+  need(stampH + 40);
+  y -= 26;
+  T('Nur für die Buchhaltung', M, y, { size: 8, font: B, color: MUTED });
+  y -= stampH + 6;
+  [['Freigabe', M], ['Bezahlt', M + stampW + gap]].forEach(([label, x]) => {
+    page.drawRectangle({ x, y, width: stampW, height: stampH, borderColor: LINE, borderWidth: 1, borderDashArray: [4, 3] });
+    T(label, x + 10, y + stampH - 16, { size: 10, font: B, color: MUTED });
+  });
 
   /* --- Anlagen: Belege --- */
   const problems = [];
@@ -989,18 +949,6 @@ async function init() {
 
   // Einstellungen
   $('#settingsForm').addEventListener('submit', saveSettings);
-  $('#logoFile').onchange = async (ev) => {
-    const file = ev.target.files[0];
-    ev.target.value = '';
-    if (!file) return;
-    try {
-      pendingLogo = await convertImage(file, { max: 900, type: 'image/png' });
-      renderLogoPreview(pendingLogo);
-    } catch {
-      toast('Logo konnte nicht gelesen werden.');
-    }
-  };
-  $('#logoRemove').onclick = () => ((pendingLogo = null), renderLogoPreview(null));
   $('#btnBackup').onclick = exportBackup;
   $('#restoreFile').onchange = (ev) => {
     const f = ev.target.files[0];
@@ -1018,11 +966,9 @@ async function init() {
   );
 
   // Daten laden
-  const [entries, settings, logo] = await Promise.all([db.allEntries(), db.get('settings'), db.get('logo')]);
+  const [entries, settings] = await Promise.all([db.allEntries(), db.get('settings')]);
   state.entries = entries || [];
   state.settings = { ...DEFAULT_SETTINGS, ...(settings || {}) };
-  state.logo = logo || null;
-  renderBrand();
   render();
 
   // Browser bitten, die Daten dauerhaft zu behalten

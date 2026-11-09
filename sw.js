@@ -1,6 +1,6 @@
 // Offline-Unterstützung: App-Dateien werden zwischengespeichert.
 // Bei jeder Änderung an der App CACHE hochzählen.
-const CACHE = 'spesen-si-v2';
+const CACHE = 'spesen-si-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,8 @@ const ASSETS = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
+  './img/logo.png',
+  './img/logo-dark.png',
 ];
 
 self.addEventListener('install', (event) => {
